@@ -2,6 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from org_db_server.api import indexing
+
 app = FastAPI(title="org-db Server", version="0.1.0")
 
 # Allow Emacs to connect from localhost
@@ -12,6 +14,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(indexing.router)
 
 @app.get("/health")
 async def health_check():
