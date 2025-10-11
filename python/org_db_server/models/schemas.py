@@ -77,3 +77,20 @@ class SemanticSearchResponse(BaseModel):
     results: List[SearchResult]
     query: str
     model_used: str
+
+class FulltextSearchRequest(BaseModel):
+    """Request for full-text search."""
+    query: str = Field(..., min_length=1, description="Search query (FTS5 syntax)")
+    limit: int = Field(default=10, ge=1, le=100, description="Maximum number of results")
+
+class FulltextSearchResult(BaseModel):
+    """Single fulltext search result."""
+    filename: str
+    title: str
+    content: str
+    tags: str
+
+class FulltextSearchResponse(BaseModel):
+    """Response from fulltext search."""
+    results: List[FulltextSearchResult]
+    query: str

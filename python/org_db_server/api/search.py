@@ -3,7 +3,10 @@ from fastapi import APIRouter, HTTPException
 import numpy as np
 from typing import List, Tuple
 
-from org_db_server.models.schemas import SemanticSearchRequest, SemanticSearchResponse, SearchResult
+from org_db_server.models.schemas import (
+    SemanticSearchRequest, SemanticSearchResponse, SearchResult,
+    FulltextSearchRequest, FulltextSearchResponse, FulltextSearchResult
+)
 from org_db_server.services.database import Database
 from org_db_server.services.embeddings import get_embedding_service
 from org_db_server.config import settings
@@ -87,6 +90,39 @@ async def semantic_search(request: SemanticSearchRequest):
             results=search_results,
             query=request.query,
             model_used=model_name
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/fulltext", response_model=FulltextSearchResponse)
+async def fulltext_search(request: FulltextSearchRequest):
+    """Perform full-text search using FTS5."""
+    try:
+        cursor = db.conn.cursor()
+
+        # Query FTS5 table
+        cursor.execute(
+            f"SELECT filename, title, content, tags FROM fts_content WHERE fts_content MATCH ? LIMIT ?",
+            (request.query, request.limit)
+        )
+
+        rows = cursor.fetchall()
+
+        # Convert to result objects
+        results = [
+            FulltextSearchResult(
+                filename=row[0],
+                title=row[1],
+                content=row[2],
+                tags=row[3] or ""
+            )
+            for row in rows
+        ]
+
+        return FulltextSearchResponse(
+            results=results,
+            query=request.query
         )
 
     except Exception as e:
