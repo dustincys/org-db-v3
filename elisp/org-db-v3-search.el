@@ -283,11 +283,13 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
               (insert (format "   :FILE: %s\n" filename))
               (insert (format "   :END:\n\n"))
 
-              ;; Try to display the image inline if possible
+              ;; Display inline thumbnail using text property
               (when (and (file-exists-p image-path)
                         (display-images-p))
                 (insert "   ")
-                (insert-image (create-image image-path nil nil :max-width 400))
+                ;; Use propertize with 'display property for inline thumbnail
+                (insert (propertize " " 'display
+                                   (create-image image-path nil nil :width 300)))
                 (insert "\n\n")))))
 
         ;; Set up buffer

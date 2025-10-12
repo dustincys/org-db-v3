@@ -5,7 +5,7 @@
 
 ;;; Code:
 
-(require 'org-db-v3)
+;; (require 'org-db-v3)
 
 (defcustom org-db-v3-python-command "uv"
   "Command to run Python (uv, python3, etc)."

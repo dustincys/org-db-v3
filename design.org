@@ -1,0 +1,52 @@
+# -*- eval: (and (fboundp 'gptel-mode) (gptel-mode 1)); -*-
+:PROPERTIES:
+:GPTEL_MODEL: claude-sonnet-4-20250514
+:GPTEL_BACKEND: Claude
+:GPTEL_SYSTEM: You are a large language model working in Emacs and a helpful assistant. Respond concisely using org-mode syntax.\n\nWhen writing Python code, use this template:\n\n#+BEGIN_SRC jupyter-python\n<python-code>\n#+END_SRC\n
+:GPTEL_BOUNDS: ((response (562 789)))
+:END:
+* org-db v3
+
+Add an elisp block to add /Users/jkitchin/Dropbox/emacs/scimax/org-db-v3/elisp/ to the load-path and then to load elisp/org-db-v3.el
+
+Here's an elisp block to add the directory to your load-path and load the org-db-v3 module:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "/Users/jkitchin/Dropbox/emacs/scimax/org-db-v3/elisp/")
+(require 'org-db-v3)
+#+END_SRC
+
+
+#+attr_org: :width 800
+[[./screenshots/date-11-10-2025-time-19-42-00.png]]
+
+
+
+* TODO v3 tasks
+
+
+elisp:org-db-v3-semantic-search  are these real results
+
+elisp:org-db-v3-fulltext-search no result found
+
+elisp:org-db-v3-image-search has an error
+
+elisp:org-db-v3-start-server
+
+elisp:org-db-v3-stop-server  does it really stop?
+
+** use completing read for search and open file
+
+** image search with thumbnails
+
+** stats?
+
+** isn't there a server cli?
+
+** add indexing functionality
+
+** add server homepage
+
+** update default clip model to sentence transformers
+
+** no transient
