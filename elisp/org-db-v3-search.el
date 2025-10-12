@@ -314,29 +314,29 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                   (recenter))))))))))
 
 ;;;###autoload
-(defun org-db-v3-headline-search (query)
-  "Search headlines by QUERY and jump to selection.
-With empty query, shows all headlines."
-  (interactive "sHeadline search (empty for all): ")
+(defun org-db-v3-headline-search ()
+  "Browse all headlines and jump to selection.
+You can filter candidates dynamically using completing-read."
+  (interactive)
 
   (org-db-v3-ensure-server)
 
   (plz 'post (concat (org-db-v3-server-url) "/api/search/headlines")
     :headers '(("Content-Type" . "application/json"))
-    :body (json-encode `((query . ,query)
-                        (limit . 100)))
+    :body (json-encode `((query . "")
+                        (limit . 1000)))
     :as #'json-read
     :then (lambda (response)
-            (org-db-v3-display-headline-results query response))
+            (org-db-v3-display-headline-results response))
     :else (lambda (error)
             (message "Search error: %s" (plz-error-message error)))))
 
-(defun org-db-v3-display-headline-results (query response)
-  "Display headline search RESPONSE for QUERY using completing-read."
+(defun org-db-v3-display-headline-results (response)
+  "Display headline search RESPONSE using completing-read."
   (let ((results (alist-get 'results response)))
 
     (if (zerop (length results))
-        (message "No headlines found%s" (if (string-empty-p query) "" (format " for: %s" query)))
+        (message "No headlines found in database")
 
       ;; Build candidates with metadata
       (let* ((candidates nil)
