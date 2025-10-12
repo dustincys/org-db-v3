@@ -37,11 +37,12 @@
 ;;;###autoload
 (defun org-db-v3-agenda (&optional before-date)
   "Show agenda of TODO items with deadlines/scheduled dates.
-BEFORE-DATE is a date string like \"+2w\" or \"2025-12-31\".
-Shows items due before this date."
-  (interactive)
-  (let ((before (or before-date
-                    (read-string "Show items before (e.g. +2w, +1m): " "+2w"))))
+By default shows items due in the next 2 weeks.
+With prefix argument, prompts for a custom date range.
+BEFORE-DATE is a date string like \"+2w\", \"+1m\", or \"2025-12-31\"."
+  (interactive (list (when current-prefix-arg
+                       (read-string "Show items before (e.g. +2w, +1m): " "+2w"))))
+  (let ((before (or before-date "+2w")))
     (org-db-v3-ensure-server)
 
     (plz 'post (concat (org-db-v3-server-url) "/api/agenda")
@@ -102,7 +103,7 @@ Shows items due before this date."
                                    padded-date
                                    padded-title-final
                                    padded-tags
-                                   (file-name-nondirectory filename)))
+                                   filename))
                  ;; Determine face based on date
                  (face (cond
                         ((string= priority "A") '(:foreground "red1" :weight bold))
