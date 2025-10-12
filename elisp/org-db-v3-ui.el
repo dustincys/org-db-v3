@@ -103,7 +103,7 @@
   (let ((buffer (get-buffer "*org-db-server*")))
     (if buffer
         (pop-to-buffer buffer)
-      (message "Server log buffer not found. Is the server running?"))))
+      (message "Server not started via org-db-v3-start-server. Check your terminal/shell for logs."))))
 
 ;;;###autoload
 (defun org-db-v3-open-web-interface ()
