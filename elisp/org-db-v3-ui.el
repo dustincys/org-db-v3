@@ -102,12 +102,23 @@
 
 ;;;###autoload
 (defun org-db-v3-view-logs ()
-  "View the server log buffer."
+  "View the server log buffer or file."
   (interactive)
-  (let ((buffer (get-buffer "*org-db-server*")))
-    (if buffer
-        (pop-to-buffer buffer)
-      (message "Server not started via org-db-v3-start-server. Check your terminal/shell for logs."))))
+  (let ((buffer (get-buffer "*org-db-server*"))
+        (log-file "/tmp/org-db-server.log"))
+    (cond
+     ;; First try process buffer
+     (buffer
+      (pop-to-buffer buffer))
+     ;; Then try log file
+     ((file-exists-p log-file)
+      (find-file-other-window log-file)
+      (goto-char (point-max))
+      (auto-revert-tail-mode 1)
+      (message "Viewing server logs from %s" log-file))
+     ;; No logs available
+     (t
+      (message "No server logs found. Server not running or logs not captured.")))))
 
 ;;;###autoload
 (defun org-db-v3-open-web-interface ()
