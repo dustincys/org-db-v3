@@ -72,16 +72,27 @@ Returns plist with :filename_pattern and/or :keyword."
 
 ;;;###autoload
 (defun org-db-v3-scope-project ()
-  "Set search scope to current Projectile project."
+  "Set search scope to a Projectile project.
+Prompts user to select from known projects, with current project as default."
   (interactive)
-  (if (and (fboundp 'projectile-project-root)
-           (projectile-project-root))
-      (progn
-        (setq org-db-v3-search-scope
-              (cons 'project (projectile-project-root)))
-        (message "Scope: %s (next search only)"
-                 (org-db-v3--scope-description)))
-    (message "No project detected. Scope unchanged.")
+  (if (and (fboundp 'projectile-completing-read)
+           (fboundp 'projectile-relevant-known-projects))
+      (let* ((projects (projectile-relevant-known-projects))
+             (current-project (when (fboundp 'projectile-project-root)
+                                (projectile-project-root)))
+             (project (if projects
+                          (projectile-completing-read
+                           "Select project: "
+                           projects
+                           :initial-input current-project)
+                        current-project)))
+        (if project
+            (progn
+              (setq org-db-v3-search-scope (cons 'project project))
+              (message "Scope: %s (next search only)"
+                       (org-db-v3--scope-description)))
+          (message "No project selected. Scope unchanged.")))
+    (message "Projectile not available. Scope unchanged.")
     (ding)))
 
 ;;;###autoload
