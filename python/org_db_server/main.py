@@ -1,8 +1,10 @@
 """FastAPI server for org-db v3."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from pathlib import Path
 
-from org_db_server.api import indexing, search
+from org_db_server.api import indexing, search, stats
 
 app = FastAPI(title="org-db Server", version="0.1.0")
 
@@ -18,13 +20,20 @@ app.add_middleware(
 # Include routers
 app.include_router(indexing.router)
 app.include_router(search.router)
+app.include_router(stats.router)
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "version": "0.1.0"}
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """Root endpoint."""
-    return {"message": "org-db v3 server running"}
+    """Root endpoint - serve homepage."""
+    # Load HTML template
+    template_path = Path(__file__).parent / "templates" / "homepage.html"
+    if template_path.exists():
+        with open(template_path, "r") as f:
+            return f.read()
+    else:
+        return {"message": "org-db v3 server running"}
