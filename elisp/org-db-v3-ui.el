@@ -52,6 +52,49 @@ Returns plist with :filename_pattern and/or :keyword."
      (list :keyword (cdr org-db-v3-search-scope)))
     (_ nil)))
 
+;;;###autoload
+(defun org-db-v3-scope-all ()
+  "Set search scope to all files."
+  (interactive)
+  (setq org-db-v3-search-scope '(all . nil))
+  (message "Scope: All files (next search only)"))
+
+;;;###autoload
+(defun org-db-v3-scope-directory ()
+  "Set search scope to a directory."
+  (interactive)
+  (let ((dir (read-directory-name "Limit search to directory: ")))
+    (when dir
+      (setq org-db-v3-search-scope
+            (cons 'directory (expand-file-name dir)))
+      (message "Scope: %s (next search only)"
+               (org-db-v3--scope-description)))))
+
+;;;###autoload
+(defun org-db-v3-scope-project ()
+  "Set search scope to current Projectile project."
+  (interactive)
+  (if (and (fboundp 'projectile-project-root)
+           (projectile-project-root))
+      (progn
+        (setq org-db-v3-search-scope
+              (cons 'project (projectile-project-root)))
+        (message "Scope: %s (next search only)"
+                 (org-db-v3--scope-description)))
+    (message "No project detected. Scope unchanged.")
+    (ding)))
+
+;;;###autoload
+(defun org-db-v3-scope-tag ()
+  "Set search scope to files with a specific keyword/tag."
+  (interactive)
+  (let ((tag (read-string "Limit search to keyword/tag: ")))
+    (when (and tag (not (string-empty-p tag)))
+      (setq org-db-v3-search-scope
+            (cons 'tag tag))
+      (message "Scope: %s (next search only)"
+               (org-db-v3--scope-description)))))
+
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
   "org-db v3 - Search and manage your org files."
