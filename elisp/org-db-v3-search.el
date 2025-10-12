@@ -271,10 +271,17 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                                    display-image))
                  (padded-image (format (format "%%-%ds" image-width) truncated-image))
                  ;; Format with fixed-width columns: score | image-filename | org-filename
-                 (candidate (format "%-6.3f | %s | %s"
+                 (text-part (format "%-6.3f | %s | %s"
                                     similarity
                                     padded-image
-                                    (file-name-nondirectory filename))))
+                                    (file-name-nondirectory filename)))
+                 ;; Add thumbnail if image exists
+                 (candidate (if (and image-path (file-exists-p image-path))
+                               (concat text-part
+                                       "\n"
+                                       (propertize " " 'display
+                                                  (create-image image-path nil nil :width 200)))
+                             text-part)))
 
             ;; Store metadata
             (puthash candidate
