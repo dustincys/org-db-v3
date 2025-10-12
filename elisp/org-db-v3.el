@@ -60,6 +60,7 @@
 (require 'org-db-v3-client)
 (require 'org-db-v3-server)
 (require 'org-db-v3-search)
+(require 'org-db-v3-ui)
 
 (defun org-db-v3-hook-function ()
   "Hook function for org-mode files."
