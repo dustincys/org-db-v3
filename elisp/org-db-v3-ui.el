@@ -26,6 +26,8 @@
      :description "Search by meaning using embeddings")
     ("f" "Full-text search" org-db-v3-fulltext-search
      :description "Search by keywords (FTS5)")
+    ("h" "Headline search" org-db-v3-headline-search
+     :description "Search/browse headlines and jump to them")
     ("a" "Search at point" org-db-v3-search-at-point
      :description "Search using text at point/region")]
    ["Image Search"

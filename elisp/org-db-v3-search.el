@@ -313,5 +313,89 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                   (beginning-of-line)
                   (recenter))))))))))
 
+;;;###autoload
+(defun org-db-v3-headline-search (query)
+  "Search headlines by QUERY and jump to selection.
+With empty query, shows all headlines."
+  (interactive "sHeadline search (empty for all): ")
+
+  (org-db-v3-ensure-server)
+
+  (plz 'post (concat (org-db-v3-server-url) "/api/search/headlines")
+    :headers '(("Content-Type" . "application/json"))
+    :body (json-encode `((query . ,query)
+                        (limit . 100)))
+    :as #'json-read
+    :then (lambda (response)
+            (org-db-v3-display-headline-results query response))
+    :else (lambda (error)
+            (message "Search error: %s" (plz-error-message error)))))
+
+(defun org-db-v3-display-headline-results (query response)
+  "Display headline search RESPONSE for QUERY using completing-read."
+  (let ((results (alist-get 'results response)))
+
+    (if (zerop (length results))
+        (message "No headlines found%s" (if (string-empty-p query) "" (format " for: %s" query)))
+
+      ;; Build candidates with metadata
+      (let* ((candidates nil)
+             (metadata-table (make-hash-table :test 'equal)))
+
+        (dotimes (i (length results))
+          (let* ((result (aref results i))
+                 (title (alist-get 'title result))
+                 (filename (alist-get 'filename result))
+                 (begin (alist-get 'begin result))
+                 (level (alist-get 'level result))
+                 ;; Fixed widths for alignment
+                 (title-width 40)
+                 (display-title (if (> (length title) title-width)
+                                   (concat (substring title 0 (- title-width 3)) "...")
+                                 title))
+                 (padded-title (format (format "%%-%ds" title-width) display-title))
+                 ;; Calculate line number from character position by reading file
+                 (line-number (org-db-v3--char-to-line filename begin))
+                 ;; Format with fixed-width columns: headline | filename:line
+                 (candidate (format "%s | %s:%d"
+                                   padded-title
+                                   (file-name-nondirectory filename)
+                                   line-number)))
+
+            ;; Store metadata
+            (puthash candidate
+                    (list :file filename
+                          :begin begin
+                          :line line-number
+                          :level level)
+                    metadata-table)
+            (push candidate candidates)))
+
+        ;; Keep original order (by filename and position)
+        (setq candidates (nreverse candidates))
+
+        ;; Let user select
+        (let ((selection (completing-read
+                         (format "Headlines (%d found): " (length results))
+                         candidates
+                         nil t)))
+          (when selection
+            (let* ((metadata (gethash selection metadata-table))
+                   (file (plist-get metadata :file))
+                   (begin (plist-get metadata :begin)))
+              (when (and file (file-exists-p file))
+                (find-file file)
+                (goto-char begin)
+                (org-show-entry)
+                (recenter)))))))))
+
+(defun org-db-v3--char-to-line (filename char-pos)
+  "Convert character position CHAR-POS in FILENAME to line number.
+Uses caching to avoid repeated file reads."
+  (with-temp-buffer
+    (insert-file-contents filename)
+    (goto-char char-pos)
+    (line-number-at-pos)))
+
 (provide 'org-db-v3-search)
 ;;; org-db-v3-search.el ends here

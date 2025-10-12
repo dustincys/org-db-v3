@@ -118,3 +118,22 @@ class ImageSearchResponse(BaseModel):
     results: List[ImageSearchResult]
     query: str
     model_used: str
+
+class HeadlineSearchRequest(BaseModel):
+    """Request for headline search."""
+    query: str = Field(default="", description="Search query (empty for all headlines)")
+    limit: int = Field(default=100, ge=1, le=1000, description="Maximum number of results")
+
+class HeadlineSearchResult(BaseModel):
+    """Single headline search result."""
+    title: str
+    filename: str
+    begin: int
+    level: int
+    tags: Optional[str] = None
+    todo_keyword: Optional[str] = None
+
+class HeadlineSearchResponse(BaseModel):
+    """Response from headline search."""
+    results: List[HeadlineSearchResult]
+    query: str

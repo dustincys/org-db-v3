@@ -50,16 +50,28 @@ elisp:org-db-menu
 
 * TODO v3 tasks
 
-** use completing read for search and open file
+** DONE No images seem to be found.
+CLOSED: [2025-10-12 Sun 08:10]
+
+Describe how the images are found in the files, and how they are passed to the server.
+
+** DONE image search with thumbnails
+CLOSED: [2025-10-12 Sun 08:10]
+
+** full text is not working
+
+** line numbers seem to be wrong in semantic search
+
+they are all listed as 0. Confirm that the line numbers are being stored for chunks and getting returned in the search
+
+** DONE use completing read for search and open file
+CLOSED: [2025-10-12 Sun 08:04]
 
 For the completing read candidates in the search functions, create a tabular string like this (Python f-string syntax)
 
 {score:<6.2f} | {context:<20s} | {fullpath}:{lineno}
 
-
-** image search with thumbnails
-
-No images seem to be found
+The point is to make them look nicer with each part in columns that are aligned
 
 ** DONE update default the clip model to sentence transformers
 CLOSED: [2025-10-12 Sun 07:57]

@@ -6,7 +6,8 @@ from typing import List, Tuple
 from org_db_server.models.schemas import (
     SemanticSearchRequest, SemanticSearchResponse, SearchResult,
     FulltextSearchRequest, FulltextSearchResponse, FulltextSearchResult,
-    ImageSearchRequest, ImageSearchResponse, ImageSearchResult
+    ImageSearchRequest, ImageSearchResponse, ImageSearchResult,
+    HeadlineSearchRequest, HeadlineSearchResponse, HeadlineSearchResult
 )
 from org_db_server.services.database import Database
 from org_db_server.services.embeddings import get_embedding_service
@@ -196,6 +197,55 @@ async def image_search(request: ImageSearchRequest):
             results=search_results,
             query=request.query,
             model_used=clip_service.model_name
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/headlines", response_model=HeadlineSearchResponse)
+async def headline_search(request: HeadlineSearchRequest):
+    """Search or list all headlines."""
+    try:
+        cursor = db.conn.cursor()
+
+        if request.query:
+            # Search headlines by title using LIKE
+            cursor.execute("""
+                SELECT h.title, f.filename, h.begin, h.level, h.tags, h.todo_keyword
+                FROM headlines h
+                JOIN files f ON h.filename_id = f.rowid
+                WHERE h.title LIKE ?
+                ORDER BY f.filename, h.begin
+                LIMIT ?
+            """, (f"%{request.query}%", request.limit))
+        else:
+            # Return all headlines
+            cursor.execute("""
+                SELECT h.title, f.filename, h.begin, h.level, h.tags, h.todo_keyword
+                FROM headlines h
+                JOIN files f ON h.filename_id = f.rowid
+                ORDER BY f.filename, h.begin
+                LIMIT ?
+            """, (request.limit,))
+
+        rows = cursor.fetchall()
+
+        # Convert to result objects
+        results = [
+            HeadlineSearchResult(
+                title=row[0],
+                filename=row[1],
+                begin=row[2],
+                level=row[3],
+                tags=row[4],
+                todo_keyword=row[5]
+            )
+            for row in rows
+        ]
+
+        return HeadlineSearchResponse(
+            results=results,
+            query=request.query
         )
 
     except Exception as e:
