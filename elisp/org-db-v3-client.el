@@ -65,5 +65,29 @@
     (cancel-timer org-db-v3-idle-timer)
     (setq org-db-v3-idle-timer nil)))
 
+;;;###autoload
+(defun org-db-v3-index-directory (directory)
+  "Recursively index all org files in DIRECTORY."
+  (interactive "DDirectory to index: ")
+  (let* ((org-files (directory-files-recursively
+                     directory
+                     "\\.org\\(\\.gpg\\)?\\'"
+                     nil
+                     (lambda (dir)
+                       ;; Skip hidden directories and common ignore patterns
+                       (not (string-match-p "/\\." (file-name-nondirectory dir))))))
+         (count (length org-files)))
+    (if (zerop count)
+        (message "No org files found in %s" directory)
+      (when (yes-or-no-p (format "Index %d org file%s in %s? "
+                                 count
+                                 (if (= count 1) "" "s")
+                                 directory))
+        (dolist (file org-files)
+          (org-db-v3-add-to-queue file))
+        (message "Added %d org file%s to indexing queue"
+                 count
+                 (if (= count 1) "" "s"))))))
+
 (provide 'org-db-v3-client)
 ;;; org-db-v3-client.el ends here

@@ -36,7 +36,9 @@
     ("u" "Update current file" org-db-v3-update-current-file
      :description "Re-index the current org file")
     ("U" "Update all open files" org-db-v3-update-all-buffers
-     :description "Re-index all open org buffers")]
+     :description "Re-index all open org buffers")
+    ("d" "Index directory" org-db-v3-index-directory
+     :description "Recursively index all org files in a directory")]
    ["Server"
     ("S" "Server status" org-db-v3-server-status
      :description "Check if server is running")
