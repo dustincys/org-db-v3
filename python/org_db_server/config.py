@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Embedding models
     default_embedding_model: str = "all-MiniLM-L6-v2"
-    default_clip_model: str = "openai/clip-vit-base-patch32"
+    default_clip_model: str = "clip-ViT-B-32"
 
     # Indexing
     chunk_size: int = 512

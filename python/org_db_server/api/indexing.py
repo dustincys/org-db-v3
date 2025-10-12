@@ -140,33 +140,46 @@ async def index_file(request: IndexFileRequest):
         db.populate_fts(file_id, request.filename, request.content or "")
 
         # Process images with CLIP if any
+        print(f"DEBUG: Received {len(request.images)} images from client")
         if request.images:
             images_with_embeddings = []
             images_data = []
 
             for img in request.images:
+                print(f"DEBUG: Processing image: {img.path}")
                 # Resolve image path relative to org file
                 org_dir = Path(request.filename).parent
                 img_path = org_dir / img.path
+                print(f"DEBUG: Resolved path: {img_path}, exists={img_path.exists()}")
 
                 if img_path.exists() and img_path.is_file():
                     try:
                         images_data.append({"path": str(img_path), "begin": img.begin})
+                        print(f"DEBUG: Added image to process: {img_path}")
                     except Exception as e:
                         print(f"Error preparing image {img_path}: {e}")
+                else:
+                    print(f"DEBUG: Image file not found or not a file: {img_path}")
 
             # Generate CLIP embeddings for valid images
             if images_data:
+                print(f"DEBUG: Generating CLIP embeddings for {len(images_data)} images")
                 try:
                     clip_service = get_clip_service()
                     image_paths = [img["path"] for img in images_data]
                     embeddings = clip_service.generate_image_embeddings(image_paths)
+                    print(f"DEBUG: Generated {len(embeddings)} embeddings")
 
                     # Store images and embeddings
                     db.store_images(file_id, images_data, embeddings, clip_service.model_name)
+                    print(f"DEBUG: Successfully stored images and embeddings")
                 except Exception as e:
                     print(f"Error generating CLIP embeddings: {e}")
+                    import traceback
+                    traceback.print_exc()
                     # Continue without image embeddings
+            else:
+                print(f"DEBUG: No valid images to process after path resolution")
 
         db.conn.commit()
 
