@@ -110,7 +110,8 @@ Returns plist with :filename_pattern and/or :keyword."
 
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
-  [:description (lambda () (format "org-db v3 [Scope: %s]" (org-db-v3--scope-description)))
+  "org-db v3 - Search and manage your org files."
+  [:description (lambda () (format "Scope: %s" (org-db-v3--scope-description)))
    ["Search"
     ["Text Search"
      ("v" "Semantic search" org-db-v3-semantic-search
