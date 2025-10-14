@@ -80,22 +80,19 @@ Skips Emacs temporary files (.#*, #*#, *~)."
 (defun org-db-v3-process-index-queue ()
   "Process one file from the index queue.
 Waits for each request to complete before processing the next file."
-  (when org-db-v3-index-queue
-    (let ((filename (pop org-db-v3-index-queue)))
-      (setq org-db-v3-index-processed (1+ org-db-v3-index-processed))
+  (if org-db-v3-index-queue
+      (let ((filename (pop org-db-v3-index-queue)))
+        (setq org-db-v3-index-processed (1+ org-db-v3-index-processed))
 
-      ;; Update progress in echo area
-      (message "Indexing [%d/%d]: %s"
-               org-db-v3-index-processed
-               org-db-v3-index-total
-               (file-name-nondirectory filename))
+        ;; Update progress in echo area
+        (message "Indexing [%d/%d]: %s"
+                 org-db-v3-index-processed
+                 org-db-v3-index-total
+                 (file-name-nondirectory filename))
 
-      ;; Index the file and continue queue on completion
-      (org-db-v3-index-file-with-continuation filename)))
-
-  ;; If queue is empty, clean up
-  (when (null org-db-v3-index-queue)
-    ;; Clear the indexing marker
+        ;; Index the file and continue queue on completion
+        (org-db-v3-index-file-with-continuation filename))
+    ;; Queue is empty, clean up
     (setq org-db-v3-index-timer nil)
     (message "Indexing complete: %d file%s processed"
              org-db-v3-index-total
