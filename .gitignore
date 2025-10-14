@@ -20,6 +20,9 @@ build/
 *.db-shm
 *.db-wal
 
+# Local development database directory (keep README.md)
+/db/*.db*
+
 # IDE
 .vscode/
 .idea/
