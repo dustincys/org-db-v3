@@ -15,6 +15,8 @@ A modern org-mode database with semantic search capabilities. Built with a hybri
 - *Scoped Search* :: Limit searches to specific directories, projects (Projectile), or keyword/tags
 - *Agenda* :: View TODOs, deadlines, and scheduled items from all indexed files
 - *Non-blocking Indexing* :: Queue-based indexing with configurable delays keeps Emacs responsive
+- *Linked File Indexing* :: Automatically indexes linked documents (PDF, DOCX, PPTX, etc.) for comprehensive search
+- *gptel Integration* :: Expose search tools to LLMs for AI-powered org file exploration
 - *Transient UI* :: Easy-to-use menu system for all commands (=H-v= or =M-x org-db=)
 - *Web Interface* :: Browse statistics and documentation via browser
 
@@ -64,11 +66,19 @@ Add to your Emacs config:
 
 ;; Auto-start server when Emacs starts (optional)
 (setq org-db-v3-auto-start-server t)
+
+;; Optional: Enable gptel integration for AI-powered search
+(when (featurep 'gptel)
+  (require 'org-db-v3-gptel-tools)
+  (org-db-v3-gptel-register-tools))
 #+END_SRC
 
 Required Emacs packages:
 - =plz= (async HTTP client)
 - =transient= (menu system)
+
+Optional packages:
+- =gptel= (for AI-powered search integration)
 
 Install via package manager or manually.
 
@@ -195,6 +205,134 @@ By default, shows items due in the next **2 weeks**. Use prefix argument (=C-u M
 - =+3w= - 3 weeks
 - =2025-12-31= - specific date
 
+** 6. Linked File Indexing
+
+org-db v3 automatically indexes linked documents (PDF, DOCX, PPTX, etc.) found in your org files. When you index an org file containing links like =[[./report.pdf]]= or =[[./proposal.docx]]=, the system:
+
+1. Detects the linked file
+2. Converts it to markdown using lightweight libraries:
+   - PDFs: pymupdf4llm (~10MB memory)
+   - DOCX: python-docx (text extraction)
+   - PPTX: python-pptx (text extraction)
+3. Chunks the content and generates embeddings
+4. Makes it searchable alongside your org content
+
+*** Supported Formats
+
+- PDF files (=.pdf=)
+- Microsoft Word (=.docx=)
+- PowerPoint (=.pptx=)
+- Legacy Office formats (=.doc=, =.xls=, =.xlsx=, =.ppt=) via docling subprocess
+- HTML/Web (=.html=, =.htm=)
+- Images with OCR (=.png=, =.jpg=, =.jpeg=, etc.)
+- And more (see =SUPPORTED_FORMATS.md=)
+
+*** Browsing Linked Files
+
+#+BEGIN_SRC emacs-lisp
+M-x org-db-v3-open-linked-file
+;; or press 'F' in the menu
+#+END_SRC
+
+This shows all indexed linked files with:
+- File type (PDF, DOCX, etc.)
+- Source org file location
+- Number of chunks indexed
+- Conversion status
+
+Press =RET= to jump to the org file link location, or =C-u RET= to open the linked file directly.
+
+*** Configuration
+
+#+BEGIN_SRC emacs-lisp
+;; Enable/disable linked file indexing (enabled by default)
+(setq org-db-v3-enable-linked-files t)
+
+;; Maximum file size for linked files (50MB default)
+(setq org-db-v3-max-linked-file-size 52428800)
+#+END_SRC
+
+*** Search Results
+
+When searching (semantic or fulltext), results from linked files are clearly marked:
+
+#+BEGIN_EXAMPLE
+File: /path/to/notes.org [linked PDF file: report.pdf]
+Line: 42
+Relevance: 0.834
+Content:
+The quarterly results show a 15% increase...
+#+END_EXAMPLE
+
+** 7. gptel Integration (AI-Powered Search)
+
+If you use [[https://github.com/karthink/gptel][gptel]] for LLM integration in Emacs, org-db v3 provides tools that allow AI assistants to search your org files.
+
+*** Setup
+
+#+BEGIN_SRC emacs-lisp
+;; Load the gptel tools module
+(require 'org-db-v3-gptel-tools)
+
+;; Register the tools with gptel
+(org-db-v3-gptel-register-tools)
+#+END_SRC
+
+*** Available Tools
+
+The integration provides two search tools for LLMs:
+
+**** =org_semantic_search=
+Search using AI/semantic similarity. Best for:
+- Conceptual queries ("projects related to machine learning")
+- Finding related content without exact keywords
+- Questions ("what have I written about travel?")
+
+**** =org_fulltext_search=
+Search using exact keyword matching (SQLite FTS5). Best for:
+- Finding specific terms or names
+- Exact phrases
+- Fast keyword lookup
+
+*** Usage in gptel
+
+In any org file with gptel enabled, you can configure the tools in the file header:
+
+#+BEGIN_SRC org
+,#+PROPERTY: GPTEL_TOOLS org_semantic_search org_fulltext_search
+#+END_SRC
+
+Or set buffer-locally:
+#+BEGIN_SRC emacs-lisp
+M-x gptel-set-tools RET org_semantic_search org_fulltext_search RET
+#+END_SRC
+
+Then ask the LLM to search your org files:
+- "Search my org files for travel plans"
+- "What have I written about machine learning?"
+- "Find all mentions of project deadlines"
+
+The LLM will automatically use the appropriate tool and present results in a readable format.
+
+*** Tool Parameters
+
+Both tools accept optional parameters:
+
+- =limit= :: Number of results (default 5, max 20)
+- =filename_pattern= :: SQL LIKE pattern to filter files (e.g., =%2024%= for files in 2024, =%project%= for project-related files)
+
+Example query: "Search my 2024 journal entries for mentions of conferences"
+
+The LLM will automatically add =filename_pattern= like =%journal/2024%= if needed.
+
+*** Unregistering Tools
+
+To remove the tools from gptel:
+
+#+BEGIN_SRC emacs-lisp
+(org-db-v3-gptel-unregister-tools)
+#+END_SRC
+
 * Usage
 
 ** Transient Menu
@@ -219,6 +357,7 @@ Press =H-v= or =M-x org-db= to open the menu:
 
 *** File Management
 - =f= :: Open file from database (browse indexed files)
+- =F= :: Open linked file (browse indexed linked documents like PDFs, DOCX, etc.)
 
 *** Indexing
 - =u= :: Update current file
@@ -259,12 +398,21 @@ In the =*org-db search*= buffer:
 (setq org-db-v3-auto-start-server t)
 
 ;; Indexing speed (seconds between files)
-;; Lower = faster indexing but less responsive Emacs
-;; Higher = slower indexing but more responsive Emacs
-(setq org-db-v3-index-delay 0.05)  ; default: 50ms (~20 files/sec)
+;; Lower = faster indexing but less responsive Emacs and higher server load
+;; Higher = slower indexing but more responsive Emacs and prevents server overload
+(setq org-db-v3-index-delay 0.5)  ; default: 500ms (allows linked file processing)
 
 ;; Search defaults
 (setq org-db-v3-search-default-limit 10)
+
+;; Linked file indexing
+(setq org-db-v3-enable-linked-files t)  ; enabled by default
+(setq org-db-v3-max-linked-file-size 52428800)  ; 50MB default
+
+;; gptel integration (optional)
+(require 'org-db-v3-gptel-tools)
+(org-db-v3-gptel-register-tools)
+(setq org-db-v3-gptel-search-limit 5)  ; results returned to LLM
 #+END_SRC
 
 ** Web Interface
@@ -443,13 +591,16 @@ org-db-v3/
 │   │   │   ├── indexing.py   # File indexing endpoints
 │   │   │   ├── search.py     # Search endpoints
 │   │   │   ├── stats.py      # Statistics endpoints
-│   │   │   └── agenda.py     # Agenda endpoint
+│   │   │   ├── agenda.py     # Agenda endpoint
+│   │   │   └── linked_files.py # Linked file endpoints
 │   │   ├── models/           # Pydantic schemas & DB models
 │   │   ├── services/         # Business logic
 │   │   │   ├── database.py   # SQLite operations
 │   │   │   ├── embeddings.py # Text embeddings
 │   │   │   ├── clip_service.py # Image embeddings
-│   │   │   └── chunking.py   # Text chunking
+│   │   │   ├── chunking.py   # Text chunking
+│   │   │   ├── docling_service.py # Document conversion
+│   │   │   └── docling_worker.py  # Subprocess worker
 │   │   └── templates/        # HTML templates
 │   └── tests/                # Python tests
 ├── elisp/
@@ -459,7 +610,8 @@ org-db-v3/
 │   ├── org-db-v3-server.el   # Server management
 │   ├── org-db-v3-search.el   # Search UI
 │   ├── org-db-v3-agenda.el   # Agenda functionality
-│   └── org-db-v3-ui.el       # Transient menu
+│   ├── org-db-v3-ui.el       # Transient menu
+│   └── org-db-v3-gptel-tools.el  # gptel integration
 ├── tests/                    # Emacs tests
 └── reload.el                 # Development helper
 #+END_EXAMPLE
@@ -611,6 +763,28 @@ uv sync
 uv run python -c "import org_db_server"
 #+END_SRC
 
+** gptel tools not working
+
+If you see "void-variable org-db-v3-server-url" errors:
+
+1. Make sure you've loaded the gptel-tools module:
+   #+BEGIN_SRC emacs-lisp
+   (load-file "/path/to/org-db-v3/elisp/org-db-v3-gptel-tools.el")
+   (org-db-v3-gptel-register-tools)
+   #+END_SRC
+
+2. Check that the main org-db-v3 package is loaded (it defines =org-db-v3-server-url=)
+
+3. Verify the tools are registered:
+   #+BEGIN_SRC emacs-lisp
+   M-x describe-variable RET gptel-tools RET
+   ;; Should show org_semantic_search and org_fulltext_search
+   #+END_SRC
+
+4. Make sure your =GPTEL_TOOLS= property uses the correct names:
+   - =org_semantic_search= (not =org-db-semantic-search=)
+   - =org_fulltext_search= (not =org-db-fulltext=)
+
 * Completed Features
 
 - [X] Semantic search with embeddings
@@ -623,6 +797,9 @@ uv run python -c "import org_db_server"
 - [X] Web interface with statistics
 - [X] Non-blocking directory indexing
 - [X] File browser (open files from database)
+- [X] Linked file indexing (PDF, DOCX, PPTX, etc.) with lightweight libraries
+- [X] Linked file browser (browse and open indexed documents)
+- [X] gptel integration (expose search tools to LLMs)
 - [X] Search at point
 - [X] Auto-indexing on save
 - [X] Full file paths in search results
@@ -630,6 +807,7 @@ uv run python -c "import org_db_server"
 - [X] Server startup protection (prevents multiple servers, auto-cleans zombies)
 - [X] Fast health checks with short timeouts
 - [X] Configurable indexing speed
+- [X] Memory-optimized document conversion (95% reduction vs docling)
 
 * Future Enhancements
 
