@@ -50,7 +50,7 @@ Optional FILENAME-PATTERN restricts search to matching files."
                            (json-encode request-data)
                            'utf-8))
          (response-buffer (url-retrieve-synchronously
-                          (concat org-db-v3-server-url "/api/search/semantic")
+                          (concat (org-db-v3-server-url) "/api/search/semantic")
                           t nil 10)))
     (if (not response-buffer)
         (error "Failed to connect to org-db server")
@@ -85,7 +85,7 @@ Optional FILENAME-PATTERN restricts search to matching files."
                            (json-encode request-data)
                            'utf-8))
          (response-buffer (url-retrieve-synchronously
-                          (concat org-db-v3-server-url "/api/search/fulltext")
+                          (concat (org-db-v3-server-url) "/api/search/fulltext")
                           t nil 10)))
     (if (not response-buffer)
         (error "Failed to connect to org-db server")
