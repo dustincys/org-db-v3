@@ -5,6 +5,8 @@
 
 ;;; Code:
 
+(require 'ansi-color)
+
 ;; (require 'org-db-v3)
 
 (defcustom org-db-v3-python-command "uv"
@@ -92,6 +94,7 @@ Includes protection against concurrent starts and port conflicts."
                  :name process-name
                  :buffer buffer-name
                  :command cmd
+                 :filter #'org-db-v3-server-filter
                  :sentinel #'org-db-v3-server-sentinel))
 
           ;; Wait for server to start (with feedback)
@@ -123,6 +126,22 @@ Includes protection against concurrent starts and port conflicts."
           org-db-v3-server-starting nil)
     (message "org-db server stopped")))
 
+(defun org-db-v3-server-filter (process output)
+  "Filter PROCESS OUTPUT to colorize ANSI escape codes."
+  (when (buffer-live-p (process-buffer process))
+    (with-current-buffer (process-buffer process)
+      (let ((moving (= (point) (process-mark process))))
+        (save-excursion
+          ;; Insert the text, advancing the process marker
+          (goto-char (process-mark process))
+          (let ((start (point)))
+            (insert output)
+            (ansi-color-apply-on-region start (point)))
+          (set-marker (process-mark process) (point)))
+        ;; If point was at end, keep it at end
+        (when moving
+          (goto-char (process-mark process)))))))
+
 (defun org-db-v3-server-sentinel (process event)
   "Sentinel for server PROCESS EVENT."
   (when (string-match-p "\\(finished\\|exited\\)" event)
@@ -140,6 +159,16 @@ Automatically cleans up zombie processes without prompting when auto-starting."
         (message "Cleaning up zombie processes on port %d..." org-db-v3-server-port)
         (org-db-v3-kill-zombie-processes))
       (org-db-v3-start-server))))
+
+(defun org-db-v3-colorize-server-buffer ()
+  "Colorize ANSI escape codes in the *org-db-server* buffer.
+Useful for colorizing output that was already in the buffer before
+the filter was added."
+  (interactive)
+  (when-let ((buffer (get-buffer "*org-db-server*")))
+    (with-current-buffer buffer
+      (ansi-color-apply-on-region (point-min) (point-max))
+      (message "Colorized *org-db-server* buffer"))))
 
 (provide 'org-db-v3-server)
 ;;; org-db-v3-server.el ends here
