@@ -125,8 +125,8 @@ Returns plist with :filename_pattern and/or :keyword."
     ("q" "Quit" transient-quit-one)]]
   ["Search"
    ["Text Search"
-    ("v" "Semantic search" org-db-v3-semantic-search
-     :description "Vector embeddings")
+    ("v" "Semantic search" org-db-v3-semantic-search-ivy
+     :description "Vector embeddings (dynamic)")
     ("k" "Full-text search" org-db-v3-fulltext-search-ivy
      :description "FTS5 keywords (dynamic)")
     ("h" "Headline search" org-db-v3-headline-search
