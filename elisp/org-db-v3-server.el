@@ -37,21 +37,34 @@ If nil, automatically detected relative to the elisp directory."
 
 (defun org-db-v3-kill-zombie-processes ()
   "Kill any zombie org-db server processes on the configured port.
-Returns t if any processes were killed, nil otherwise."
+Returns t if any processes were killed, nil otherwise.
+IMPORTANT: Only kills processes that are NOT managed by Emacs (not org-db-v3-server-process)."
   (interactive)
   (let* ((port org-db-v3-server-port)
          (lsof-output (shell-command-to-string
                        (format "lsof -i :%d -sTCP:LISTEN 2>/dev/null | tail -n +2 | awk '{print $2}'"
                                port)))
-         (pids (split-string (string-trim lsof-output) "\n" t)))
-    (when pids
-      (message "Found %d process(es) on port %d, attempting to kill..." (length pids) port)
-      (dolist (pid pids)
-        (message "Killing process %s..." pid)
+         (pids (split-string (string-trim lsof-output) "\n" t))
+         ;; Get the PID of the Emacs-managed server process
+         (emacs-server-pid (when (and org-db-v3-server-process
+                                      (process-live-p org-db-v3-server-process))
+                             (number-to-string (process-id org-db-v3-server-process))))
+         (zombie-pids (if emacs-server-pid
+                          (seq-remove (lambda (pid) (string= pid emacs-server-pid)) pids)
+                        pids)))
+    (when zombie-pids
+      (message "Found %d zombie process(es) on port %d (excluding Emacs-managed server), attempting to kill..."
+               (length zombie-pids) port)
+      (dolist (pid zombie-pids)
+        (message "Killing zombie process %s..." pid)
         (shell-command (format "kill -9 %s 2>/dev/null" pid)))
       (sleep-for 0.5)
       (message "Zombie processes cleaned up")
-      t)))
+      t)
+    (when (and pids (not zombie-pids))
+      (message "Port %d is in use by Emacs-managed server (PID %s), not killing it"
+               port emacs-server-pid)
+      nil)))
 
 (defun org-db-v3-start-server ()
   "Start the org-db server.
@@ -121,7 +134,25 @@ Includes protection against concurrent starts and port conflicts."
   (interactive)
   (when (and org-db-v3-server-process
              (process-live-p org-db-v3-server-process))
-    (kill-process org-db-v3-server-process)
+    ;; First try graceful shutdown via API
+    (condition-case err
+        (let ((url-request-method "POST")
+              (url-request-extra-headers '(("Content-Type" . "application/json"))))
+          (with-timeout (2 nil)
+            (url-retrieve-synchronously
+             (concat (org-db-v3-server-url) "/api/shutdown")
+             t nil 2)))
+      (error
+       (when org-db-v3-debug
+         (message "org-db-v3: Graceful shutdown failed: %S" err))))
+
+    ;; Give it a moment to shut down gracefully
+    (sleep-for 0.5)
+
+    ;; If still running, force kill
+    (when (process-live-p org-db-v3-server-process)
+      (kill-process org-db-v3-server-process))
+
     (setq org-db-v3-server-process nil
           org-db-v3-server-starting nil)
     (message "org-db server stopped")))
@@ -154,11 +185,19 @@ Includes protection against concurrent starts and port conflicts."
 Automatically cleans up zombie processes without prompting when auto-starting."
   (unless (org-db-v3-server-running-p)
     (when org-db-v3-auto-start-server
-      ;; If port is in use but server isn't responding, kill zombies automatically
-      (when (org-db-v3--port-in-use-p org-db-v3-server-port)
-        (message "Cleaning up zombie processes on port %d..." org-db-v3-server-port)
-        (org-db-v3-kill-zombie-processes))
-      (org-db-v3-start-server))))
+      ;; Check if we have a tracked server process
+      (if (and org-db-v3-server-process
+               (process-live-p org-db-v3-server-process))
+          ;; We have a live process, but health check failed
+          ;; This is likely because the server is busy, not dead
+          (when org-db-v3-debug
+            (message "org-db-v3: Server process alive but health check failed (likely busy)"))
+        ;; No tracked process, or it's dead
+        (when (org-db-v3--port-in-use-p org-db-v3-server-port)
+          ;; Port in use but no tracked process = zombie
+          (message "Cleaning up zombie processes on port %d..." org-db-v3-server-port)
+          (org-db-v3-kill-zombie-processes))
+        (org-db-v3-start-server)))))
 
 (defun org-db-v3-colorize-server-buffer ()
   "Colorize ANSI escape codes in the *org-db-server* buffer.
@@ -169,6 +208,17 @@ the filter was added."
     (with-current-buffer buffer
       (ansi-color-apply-on-region (point-min) (point-max))
       (message "Colorized *org-db-server* buffer"))))
+
+(defun org-db-v3-kill-emacs-hook ()
+  "Hook function to cleanly shut down the org-db server when Emacs exits.
+This ensures the database connection is closed properly."
+  (when (and org-db-v3-server-process
+             (process-live-p org-db-v3-server-process))
+    (message "Shutting down org-db server...")
+    (org-db-v3-stop-server)))
+
+;; Register the kill-emacs-hook to ensure clean shutdown
+(add-hook 'kill-emacs-hook #'org-db-v3-kill-emacs-hook)
 
 (provide 'org-db-v3-server)
 ;;; org-db-v3-server.el ends here

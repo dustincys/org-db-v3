@@ -2,6 +2,7 @@
 import os
 import signal
 import logging
+from contextlib import asynccontextmanager
 
 # Disable tokenizer parallelism before any imports that use transformers
 # This prevents warnings when forking subprocesses
@@ -23,7 +24,27 @@ logger = logging.getLogger(__name__)
 memory_handler = get_memory_handler()
 logger.info("org-db v3 server starting...")
 
-app = FastAPI(title="org-db Server", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for database cleanup."""
+    # Startup
+    logger.info("Server starting up...")
+    yield
+    # Shutdown - close all database connections
+    logger.info("Server shutting down, closing database connections...")
+    try:
+        # Close database connections from all API modules
+        from org_db_server.api import indexing, search, stats, agenda, linked_files
+        for module in [indexing, search, stats, agenda, linked_files]:
+            if hasattr(module, 'db'):
+                module.db.close()
+                logger.info(f"Closed database connection in {module.__name__}")
+    except Exception as e:
+        logger.error(f"Error closing database connections: {e}")
+
+
+app = FastAPI(title="org-db Server", version="0.1.0", lifespan=lifespan)
 
 # Allow Emacs to connect from localhost
 app.add_middleware(

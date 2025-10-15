@@ -105,6 +105,15 @@ Default is 50MB. Files larger than this will be skipped."
   :type 'integer
   :group 'org-db-v3)
 
+(defcustom org-db-v3-max-linked-files-per-org 50
+  "Maximum number of linked files to index per org file.
+Org files with more linked files than this will have indexing skipped for
+linked files to prevent timeouts. Set to nil for no limit.
+Default is 50 files."
+  :type '(choice (const :tag "No limit" nil)
+                 (integer :tag "Maximum files"))
+  :group 'org-db-v3)
+
 (defcustom org-db-v3-index-images t
   "Whether to index image files linked from org files.
 Images will be processed with OCR when indexed."
@@ -121,31 +130,48 @@ Now enabled by default with markitdown support."
 
 (defun org-db-v3-parse-linked-files (parse-tree)
   "Extract file links from PARSE-TREE that should be indexed via docling.
-Returns a list of alists with file path and line number."
+Returns a list of alists with file path and line number.
+Skips remote Tramp files to avoid connection attempts.
+Limits number of linked files per org file to prevent timeout issues."
   (when org-db-v3-index-linked-files
     (let* ((image-exts '("png" "jpg" "jpeg" "tiff" "tif" "bmp" "webp"))
            (audio-exts '("wav" "mp3" "m4a" "ogg"))
            (doc-exts (seq-difference org-db-v3-linked-file-extensions
-                                     (append image-exts audio-exts))))
-      (org-element-map parse-tree 'link
-        (lambda (link)
-          (let ((type (org-element-property :type link))
-                (path (org-element-property :path link))
-                (begin (org-element-property :begin link)))
-            ;; Handle file links - org-mode may use "file", "attachment", or "fuzzy" for local files
-            (when (and path (member type '("file" "attachment" "fuzzy")))
-              ;; Expand path if relative
-              (let* ((expanded-path (expand-file-name path
-                                                      (file-name-directory (buffer-file-name))))
-                     (ext (downcase (or (file-name-extension expanded-path) ""))))
-                ;; Only process if: has extension, file exists, and matches our criteria
-                (when (and (not (string-empty-p ext))
-                          (file-exists-p expanded-path)
-                          (or (member ext doc-exts)
-                              (and org-db-v3-index-images (member ext image-exts))
-                              (and org-db-v3-index-audio-files (member ext audio-exts))))
-                  `(("file_path" . ,expanded-path)
-                    ("org_link_line" . ,(line-number-at-pos begin))))))))))))
+                                     (append image-exts audio-exts)))
+           (linked-files
+            (org-element-map parse-tree 'link
+              (lambda (link)
+                (let ((type (org-element-property :type link))
+                      (path (org-element-property :path link))
+                      (begin (org-element-property :begin link)))
+                  ;; Handle file links - org-mode may use "file", "attachment", or "fuzzy" for local files
+                  (when (and path (member type '("file" "attachment" "fuzzy")))
+                    ;; Check if path is remote BEFORE expanding (to avoid Tramp connection)
+                    ;; Remote paths usually start with /ssh:, /scp:, /method:, etc.
+                    (unless (string-match-p "^/[a-z]+:" path)
+                      ;; Expand path if relative
+                      (let* ((expanded-path (expand-file-name path
+                                                              (file-name-directory (buffer-file-name))))
+                             (ext (downcase (or (file-name-extension expanded-path) ""))))
+                        ;; Double-check it's not remote after expansion, and other criteria
+                        (when (and (not (file-remote-p expanded-path))
+                                  (not (string-empty-p ext))
+                                  (file-exists-p expanded-path)
+                                  (or (member ext doc-exts)
+                                      (and org-db-v3-index-images (member ext image-exts))
+                                      (and org-db-v3-index-audio-files (member ext audio-exts))))
+                          `(("file_path" . ,expanded-path)
+                            ("org_link_line" . ,(line-number-at-pos begin))))))))))))
+      ;; Apply limit if configured
+      (if (and org-db-v3-max-linked-files-per-org
+               (> (length linked-files) org-db-v3-max-linked-files-per-org))
+          (progn
+            (message "Warning: %s has %d linked files, limiting to %d to prevent timeout"
+                     (file-name-nondirectory (buffer-file-name))
+                     (length linked-files)
+                     org-db-v3-max-linked-files-per-org)
+            (seq-take linked-files org-db-v3-max-linked-files-per-org))
+        linked-files))))
 
 (defun org-db-v3-count-linked-files ()
   "Count number of indexable linked files in current buffer."

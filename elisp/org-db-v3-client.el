@@ -32,6 +32,16 @@ Default 0.5s allows time for linked file processing to complete."
   :type 'number
   :group 'org-db-v3)
 
+(defcustom org-db-v3-index-timeout 240
+  "Timeout in seconds for indexing a single file.
+Files with many large linked files (PDFs, images) may take longer to process.
+Default 240 seconds (4 minutes). Files that timeout will be skipped."
+  :type 'number
+  :group 'org-db-v3)
+
+(defvar org-db-v3-index-failed-files nil
+  "List of files that failed to index in the current operation.")
+
 (defun org-db-v3-index-file-async (filename)
   "Index FILENAME asynchronously by sending to server.
 Disables local variables and hooks for safe and fast bulk indexing.
@@ -98,64 +108,91 @@ Waits for each request to complete before processing the next file."
         (org-db-v3-index-file-with-continuation filename))
     ;; Queue is empty, clean up
     (setq org-db-v3-index-timer nil)
-    (message "Indexing complete: %d file%s processed"
-             org-db-v3-index-total
-             (if (= org-db-v3-index-total 1) "" "s"))))
+    (if org-db-v3-index-failed-files
+        (message "Indexing complete: %d file%s processed, %d failed (see *Messages* for details)"
+                 org-db-v3-index-total
+                 (if (= org-db-v3-index-total 1) "" "s")
+                 (length org-db-v3-index-failed-files))
+      (message "Indexing complete: %d file%s processed"
+               org-db-v3-index-total
+               (if (= org-db-v3-index-total 1) "" "s")))))
 
 (defun org-db-v3-index-file-with-continuation (filename)
   "Index FILENAME and continue processing queue on completion.
-This ensures requests are processed sequentially, not in parallel."
-  (org-db-v3-ensure-server)
-
-  ;; Skip remote Tramp files
-  (if (file-remote-p filename)
+This ensures requests are processed sequentially, not in parallel.
+Wraps processing in error handling to prevent queue stalls."
+  ;; Wrap everything in condition-case to ensure queue continues even on unexpected errors
+  (condition-case err
       (progn
-        (message "Skipping remote Tramp file: %s" filename)
-        ;; Continue with next file in queue
-        (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
+        (org-db-v3-ensure-server)
 
-    (let ((basename (file-name-nondirectory filename)))
-      ;; Skip Emacs temporary files
-      (when (or (string-prefix-p ".#" basename)
-                (and (string-prefix-p "#" basename)
-                     (string-suffix-p "#" basename))
-                (string-suffix-p "~" basename))
-        (error "Skipping Emacs temporary file: %s" filename)))
+        ;; Skip remote Tramp files
+        (if (file-remote-p filename)
+            (progn
+              (message "Skipping remote Tramp file: %s" filename)
+              ;; Continue with next file in queue
+              (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
 
-    (when (file-exists-p filename)
-    (let ((already-open (find-buffer-visiting filename))
-          buf)
-      ;; Bind these BEFORE opening the file so they take effect during file loading
-      (let ((enable-local-variables nil)  ; Don't evaluate local variables
-            (enable-dir-local-variables nil)  ; Don't evaluate directory-local variables
-            (org-mode-hook '()))  ; Skip org-mode hooks
-        (setq buf (or already-open (find-file-noselect filename))))
+          (let ((basename (file-name-nondirectory filename)))
+            ;; Skip Emacs temporary files
+            (when (or (string-prefix-p ".#" basename)
+                      (and (string-prefix-p "#" basename)
+                           (string-suffix-p "#" basename))
+                      (string-suffix-p "~" basename))
+              (message "Skipping Emacs temporary file: %s" filename)
+              (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue)
+              (error "Skip temporary file")))
 
-      (with-current-buffer buf
-        (let ((json-data (org-db-v3-parse-buffer-to-json)))
-          (plz 'post (concat (org-db-v3-server-url) "/api/file")
-            :headers '(("Content-Type" . "application/json"))
-            :body json-data
-            :as #'json-read
-            :timeout 120  ; Allow time for linked file conversion
-            :then (lambda (response)
-                    (let ((headlines (alist-get 'headlines_count response))
-                          (linked-files (alist-get 'linked_files_count response 0)))
-                      (if (> linked-files 0)
-                          (message "Indexed %s (%d headlines, %d linked file%s)"
-                                   filename headlines linked-files
-                                   (if (= linked-files 1) "" "s"))
-                        (message "Indexed %s (%d headlines)"
-                                 filename headlines)))
-                    ;; Process next file in queue after this one completes
-                    (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
-            :else (lambda (error)
-                    (message "Error indexing %s: %s" filename error)
-                    ;; Continue with next file even on error
-                    (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
-        ;; Kill buffer if it wasn't already open
-        (unless already-open
-          (kill-buffer buf)))))))
+          (if (not (file-exists-p filename))
+              (progn
+                (message "File does not exist, skipping: %s" filename)
+                (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
+
+            (let ((already-open (find-buffer-visiting filename))
+                  buf)
+              ;; Bind these BEFORE opening the file so they take effect during file loading
+              (let ((enable-local-variables nil)  ; Don't evaluate local variables
+                    (enable-dir-local-variables nil)  ; Don't evaluate directory-local variables
+                    (org-mode-hook '()))  ; Skip org-mode hooks
+                (setq buf (or already-open (find-file-noselect filename))))
+
+              (with-current-buffer buf
+                (let ((json-data (org-db-v3-parse-buffer-to-json)))
+                  (plz 'post (concat (org-db-v3-server-url) "/api/file")
+                    :headers '(("Content-Type" . "application/json"))
+                    :body json-data
+                    :as #'json-read
+                    :timeout org-db-v3-index-timeout  ; Configurable timeout
+                    :then (lambda (response)
+                            (let ((headlines (alist-get 'headlines_count response))
+                                  (linked-files (alist-get 'linked_files_count response 0)))
+                              (if (> linked-files 0)
+                                  (message "Indexed %s (%d headlines, %d linked file%s)"
+                                           filename headlines linked-files
+                                           (if (= linked-files 1) "" "s"))
+                                (message "Indexed %s (%d headlines)"
+                                         filename headlines)))
+                            ;; Process next file in queue after this one completes
+                            (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
+                    :else (lambda (error)
+                            ;; Track failed files
+                            (push filename org-db-v3-index-failed-files)
+                            ;; Check if it's a timeout
+                            (if (and (listp error) (eq (car error) 28))
+                                (message "Timeout indexing %s (exceeded %d seconds)"
+                                        (file-name-nondirectory filename)
+                                        org-db-v3-index-timeout)
+                              (message "Error indexing %s: %s"
+                                      (file-name-nondirectory filename) error))
+                            ;; Continue with next file even on error
+                            (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
+                ;; Kill buffer if it wasn't already open
+                (unless already-open
+                  (kill-buffer buf)))))))
+    ;; Catch any unexpected errors and continue queue processing
+    (error
+     (message "Unexpected error processing %s: %S - continuing queue" filename err)
+     (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
 
 ;;;###autoload
 (defun org-db-v3-index-directory (directory)
@@ -200,7 +237,8 @@ Skips remote Tramp files."
         ;; Set up the queue
         (setq org-db-v3-index-queue org-files
               org-db-v3-index-total count
-              org-db-v3-index-processed 0)
+              org-db-v3-index-processed 0
+              org-db-v3-index-failed-files nil)  ; Reset failed files list
 
         ;; Start processing first file (continuation handled in callback)
         (setq org-db-v3-index-timer t)  ; Marker that indexing is active
@@ -284,7 +322,8 @@ Skips remote Tramp files."
                       ;; Set up the queue
                       (setq org-db-v3-index-queue existing-files
                             org-db-v3-index-total (length existing-files)
-                            org-db-v3-index-processed 0)
+                            org-db-v3-index-processed 0
+                            org-db-v3-index-failed-files nil)  ; Reset failed files list
 
                       ;; Start processing first file (continuation handled in callback)
                       (setq org-db-v3-index-timer t)  ; Marker that indexing is active
@@ -319,6 +358,77 @@ Skips remote Tramp files."
               org-db-v3-index-total 0
               org-db-v3-index-processed 0))
     (message "No indexing operation in progress")))
+
+;;;###autoload
+(defun org-db-v3-resume-indexing ()
+  "Resume a stuck or paused indexing operation.
+If indexing has stalled, this will restart processing the remaining queue."
+  (interactive)
+  (cond
+   ;; No indexing operation at all
+   ((not org-db-v3-index-timer)
+    (message "No indexing operation to resume"))
+
+   ;; Queue is empty but timer is set (shouldn't happen, but clean up)
+   ((null org-db-v3-index-queue)
+    (message "Indexing queue is empty, clearing status...")
+    (setq org-db-v3-index-timer nil
+          org-db-v3-index-total 0
+          org-db-v3-index-processed 0))
+
+   ;; Valid queue exists, resume processing
+   (t
+    (message "Resuming indexing: %d files remaining (processed %d of %d)"
+             (length org-db-v3-index-queue)
+             org-db-v3-index-processed
+             org-db-v3-index-total)
+    (run-with-timer 0 nil #'org-db-v3-process-index-queue))))
+
+;;;###autoload
+(defun org-db-v3-indexing-status ()
+  "Show the status of the current indexing operation."
+  (interactive)
+  (if org-db-v3-index-timer
+      (message "Indexing in progress: %d/%d files processed, %d remaining in queue%s"
+               org-db-v3-index-processed
+               org-db-v3-index-total
+               (length org-db-v3-index-queue)
+               (if org-db-v3-index-failed-files
+                   (format ", %d failed" (length org-db-v3-index-failed-files))
+                 ""))
+    (message "No indexing operation in progress")))
+
+;;;###autoload
+(defun org-db-v3-show-failed-files ()
+  "Show list of files that failed to index in the last operation."
+  (interactive)
+  (if org-db-v3-index-failed-files
+      (with-output-to-temp-buffer "*org-db-v3-failed-files*"
+        (princ (format "Failed to index %d file(s):\n\n" (length org-db-v3-index-failed-files)))
+        (dolist (file org-db-v3-index-failed-files)
+          (princ (format "  %s\n" file))))
+    (message "No failed files in last indexing operation")))
+
+;;;###autoload
+(defun org-db-v3-cleanup-stale-processes ()
+  "Clean up stale HTTP and curl processes from failed requests.
+Only removes processes that are clearly failed or stuck.
+Safe to run while indexing is in progress."
+  (interactive)
+  (let ((killed 0))
+    (dolist (proc (process-list))
+      (let ((name (process-name proc))
+            (status (process-status proc)))
+        (when (and (string-match-p "^127\\.0\\.0\\.1" name)
+                   (eq status 'failed))
+          ;; Only kill failed HTTP connection processes
+          (delete-process proc)
+          (setq killed (1+ killed)))))
+    (if (> killed 0)
+        (message "Cleaned up %d failed HTTP connection%s"
+                 killed
+                 (if (= killed 1) "" "s"))
+      (message "No stale processes found"))))
 
 ;;;###autoload
 (defun org-db-v3-clear-database ()

@@ -64,17 +64,17 @@ Used to prevent concurrent start attempts.")
 (defun org-db-v3-server-running-p ()
   "Check if the org-db server is running.
 Returns t if server responds to health check, nil otherwise.
-Uses a short timeout to fail fast if server is stuck."
+Uses a 3-second timeout to tolerate busy servers during heavy indexing."
   (condition-case err
       (let ((url-request-method "GET")
             (url-request-extra-headers nil)
-            ;; Set connection timeout to 1 second
+            ;; Set connection timeout to 3 seconds (increased from 1 to tolerate busy servers)
             (url-http-attempt-keepalives nil))
-        (with-timeout (1 nil)  ; 1 second timeout
+        (with-timeout (3 nil)  ; 3 second timeout
           (with-current-buffer
               (url-retrieve-synchronously
                (concat (org-db-v3-server-url) "/health")
-               t nil 1)  ; 1 second read timeout
+               t nil 3)  ; 3 second read timeout
             (goto-char (point-min))
             (let ((status-line (buffer-substring-no-properties
                                (point) (line-end-position))))
