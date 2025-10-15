@@ -100,6 +100,23 @@ async def get_files():
 
     return {"files": files, "count": len(files)}
 
+@router.post("/optimize", response_model=Dict[str, Any])
+async def optimize_database():
+    """Optimize database by running ANALYZE to update index statistics.
+
+    This improves query performance, especially for vector searches.
+    Should be run after bulk indexing operations or if queries seem slow.
+    """
+    try:
+        db.optimize()
+        return {
+            "status": "success",
+            "message": "Database optimized successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error optimizing database: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to optimize database: {str(e)}")
+
 @router.delete("/clear-database", response_model=Dict[str, Any])
 async def clear_database():
     """Clear the entire database by removing the database file.

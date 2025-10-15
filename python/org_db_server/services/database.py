@@ -62,6 +62,17 @@ class Database:
         if self.conn:
             self.conn.close()
 
+    def optimize(self):
+        """Optimize database by running ANALYZE to update index statistics.
+
+        This improves query performance, especially for vector searches.
+        Should be run periodically after bulk indexing operations.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("ANALYZE")
+        self.conn.commit()
+        logger.info("Database optimized (ANALYZE completed)")
+
     def get_or_create_file_id(self, filename: str, md5: str, file_size: int) -> int:
         """Get file ID or create new file entry."""
         cursor = self.conn.cursor()
