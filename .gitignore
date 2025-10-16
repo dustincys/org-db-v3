@@ -43,6 +43,3 @@ reload.el
 # Examples output
 examples/.ob-jupyter/
 examples/screenshots/
-
-# Cleanup review (temporary)
-CLEANUP_REVIEW.md
