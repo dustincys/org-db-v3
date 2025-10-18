@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException
 import numpy as np
 import logging
+import textwrap
 from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,27 @@ router = APIRouter(prefix="/api/search", tags=["search"])
 
 # Global database instance
 db = Database(settings.db_path, settings.semantic_db_path, settings.image_db_path)
+
+def wrap_snippet(snippet: str, width: int = 80) -> str:
+    """Wrap snippet text to specified width while preserving match markers.
+
+    Args:
+        snippet: The snippet text with >>> and <<< markers
+        width: Maximum line width (default: 80)
+
+    Returns:
+        Wrapped snippet text
+    """
+    # Use textwrap to wrap the text, preserving existing whitespace structure
+    wrapped = textwrap.fill(
+        snippet,
+        width=width,
+        break_long_words=False,
+        break_on_hyphens=False,
+        replace_whitespace=True,
+        expand_tabs=False
+    )
+    return wrapped
 
 @router.post("/semantic", response_model=SemanticSearchResponse)
 async def semantic_search(request: SemanticSearchRequest):
@@ -362,7 +384,7 @@ async def fulltext_search(request: FulltextSearchRequest):
                 fts.title,
                 fts.content,
                 fts.tags,
-                snippet(fts_content, 2, '>>>', '<<<', '...', 15) as snippet,
+                snippet(fts_content, 2, '>>>', '<<<', '...', 40) as snippet,
                 bm25(fts_content) as rank
             FROM fts_content fts
         """
@@ -379,7 +401,7 @@ async def fulltext_search(request: FulltextSearchRequest):
                     fts.title,
                     fts.content,
                     fts.tags,
-                    snippet(fts_content, 2, '>>>', '<<<', '...', 15) as snippet,
+                    snippet(fts_content, 2, '>>>', '<<<', '...', 40) as snippet,
                     bm25(fts_content) as rank
                 FROM fts_content fts
                 JOIN files f ON fts.filename = f.filename
@@ -418,7 +440,7 @@ async def fulltext_search(request: FulltextSearchRequest):
                 title=row[1],
                 content=row[2],
                 tags=row[3] or "",
-                snippet=row[4],
+                snippet=wrap_snippet(row[4]),
                 rank=float(row[5])
             )
             for row in rows

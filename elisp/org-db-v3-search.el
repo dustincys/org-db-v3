@@ -423,21 +423,30 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  ;; Extract search term from snippet (text between >>> and <<<)
                  (search-term (when (string-match ">>>\\([^<]+\\)<<<" snippet)
                                (match-string 1 snippet)))
-                 ;; Clean snippet for display (remove markers and newlines)
-                 (clean-snippet (replace-regexp-in-string
-                                "[\n\r]+" " "
-                                (replace-regexp-in-string ">>>\\|<<<" "" snippet)))
-                 ;; Fixed widths for alignment
-                 (snippet-width 60)
-                 (display-snippet (if (> (length clean-snippet) snippet-width)
-                                     (concat (substring clean-snippet 0 (- snippet-width 3)) "...")
-                                   clean-snippet))
-                 (padded-snippet (format (format "%%-%ds" snippet-width) display-snippet))
+                 ;; Clean snippet for display (remove markers but keep newlines)
+                 (clean-snippet (replace-regexp-in-string ">>>\\|<<<" "" snippet))
+                 ;; Split snippet into lines and pad each to 80 chars
+                 (snippet-lines (split-string clean-snippet "\n"))
+                 (snippet-width 80)
                  ;; Format with fixed-width columns: rank | snippet | filename
-                 (candidate (format "%8.2f | %s | %s"
-                                   (abs rank)  ; bm25 scores are negative
-                                   padded-snippet
-                                   filename)))
+                 (candidate (if (= (length snippet-lines) 1)
+                               ;; Single line: format normally
+                               (format "%8.2f | %-80s | %s"
+                                      (abs rank)
+                                      (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                      filename)
+                             ;; Multi-line: first line with score and filename, rest indented
+                             (concat
+                              (format "%8.2f | %-80s | %s"
+                                     (abs rank)
+                                     (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                     filename)
+                              (mapconcat
+                               (lambda (line)
+                                 (format "\n         | %-80s |"
+                                        (truncate-string-to-width line snippet-width 0 ?\s)))
+                               (cdr snippet-lines)
+                               "")))))
 
             ;; Store metadata
             (puthash candidate
@@ -851,20 +860,30 @@ Each candidate is a string with metadata stored as text properties."
              ;; Extract search term from snippet (text between >>> and <<<)
              (search-term (when (string-match ">>>\\([^<]+\\)<<<" snippet)
                            (match-string 1 snippet)))
-             ;; Clean snippet for display
-             (clean-snippet (replace-regexp-in-string
-                            "[\n\r]+" " "
-                            (replace-regexp-in-string ">>>\\|<<<" "" snippet)))
-             (snippet-width 60)
-             (display-snippet (if (> (length clean-snippet) snippet-width)
-                                 (concat (substring clean-snippet 0 (- snippet-width 3)) "...")
-                               clean-snippet))
-             (padded-snippet (format (format "%%-%ds" snippet-width) display-snippet))
+             ;; Clean snippet for display (remove markers but keep newlines)
+             (clean-snippet (replace-regexp-in-string ">>>\\|<<<" "" snippet))
+             ;; Split snippet into lines and pad each to 80 chars
+             (snippet-lines (split-string clean-snippet "\n"))
+             (snippet-width 80)
              ;; Format: rank | snippet | filename
-             (candidate (format "%8.2f | %s | %s"
-                               (abs rank)
-                               padded-snippet
-                               (file-name-nondirectory filename))))
+             (candidate (if (= (length snippet-lines) 1)
+                           ;; Single line: format normally
+                           (format "%8.2f | %-80s | %s"
+                                  (abs rank)
+                                  (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                  (file-name-nondirectory filename))
+                         ;; Multi-line: first line with score and filename, rest indented
+                         (concat
+                          (format "%8.2f | %-80s | %s"
+                                 (abs rank)
+                                 (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                 (file-name-nondirectory filename))
+                          (mapconcat
+                           (lambda (line)
+                             (format "\n         | %-80s |"
+                                    (truncate-string-to-width line snippet-width 0 ?\s)))
+                           (cdr snippet-lines)
+                           "")))))
 
         ;; Store metadata as text properties
         (put-text-property 0 (length candidate) 'fulltext-data
