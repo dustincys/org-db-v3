@@ -17,6 +17,7 @@
 (require 'org-db-v3-server)
 (require 'org-db-v3-client)
 (require 'org-db-v3-agenda)
+(require 'org-db-v3-ignore)
 
 (defvar org-db-v3-search-scope '(all . nil)
   "Current search scope. Format: (type . value)
@@ -140,7 +141,7 @@ Returns plist with :filename_pattern and/or :keyword."
     ("p" "Search at point" org-db-v3-search-at-point
      :description "Text at point/region")]
    ["Image Search"
-    ("i" "Search images" org-db-v3--image-search-dispatch
+    ("m" "Search images" org-db-v3--image-search-dispatch
      :description (lambda () (if (fboundp 'ivy-read)
                                 "CLIP embeddings (dynamic)"
                               "CLIP embeddings")))]
@@ -172,7 +173,12 @@ Returns plist with :filename_pattern and/or :keyword."
     ("W" "Open web interface" org-db-v3-open-web-interface
      :description "Open web UI")
     ("X" "Clear database" org-db-v3-clear-database
-     :description "Clear database (destructive!)")]])
+     :description "Clear database (destructive!)")]
+   ["Ignore Patterns"
+    ("i" "Manage patterns" org-db-v3-list-ignore-patterns
+     :description "View/edit ignore patterns")
+    ("I" "Add pattern" org-db-v3-add-ignore-pattern
+     :description "Add new ignore pattern")]])
 
 ;;;###autoload
 (defun org-db-v3--semantic-search-dispatch ()
